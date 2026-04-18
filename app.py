@@ -1,237 +1,273 @@
 from dash import Dash, html, dcc, Input, Output
-import re
 
 app = Dash(__name__)
 server = app.server
 app.title = "通る提案メーカー"
 
 
-TOPIC_RULES = {
-    "トイレ": {
-        "label": "トイレ備品",
-        "problem_map": {
-            "古い": "老朽化が進んでいる",
-            "汚い": "衛生面に課題がある",
-            "臭い": "衛生環境に懸念がある",
-            "使いにくい": "使用感に課題がある",
-        },
-        "proposal": "備品の更新を行う",
-        "benefit": "衛生面と利用者の快適性の向上",
-    },
-    "スリッパ": {
-        "label": "トイレのスリッパ",
-        "problem_map": {
-            "古い": "老朽化が進んでいる",
-            "汚い": "衛生面に課題がある",
-            "使いにくい": "使用感に課題がある",
-        },
-        "proposal": "新しいスリッパへ更新する",
-        "benefit": "衛生面の改善と利用者の快適性向上",
+CATEGORY_RULES = {
+    "承認": {
+        "topic_keywords": ["承認", "回覧", "レビュー", "コメント", "確認", "決裁"],
+        "topic_label": "承認・レビュー運用",
+        "problem_rules": [
+            {
+                "keywords": ["コメント", "なし", "承認"],
+                "problem_label": "コメントがないまま承認されている",
+                "business_issue": "レビューが形骸化している可能性があります",
+                "proposal": "承認時のコメント記入ルールを明確化する",
+                "benefit": "レビューの実効性向上と文書品質の安定化",
+            },
+            {
+                "keywords": ["承認", "遅い"],
+                "problem_label": "承認に時間がかかっている",
+                "business_issue": "意思決定や進行に遅れが生じている可能性があります",
+                "proposal": "承認フローや担当分担を見直す",
+                "benefit": "意思決定の迅速化と待機時間の削減",
+            },
+            {
+                "keywords": ["確認", "していない"],
+                "problem_label": "十分な確認が行われていない",
+                "business_issue": "承認プロセスの品質が担保されにくい状態です",
+                "proposal": "確認観点を明文化し、レビュー基準を共有する",
+                "benefit": "確認品質の向上と手戻りの削減",
+            },
+        ],
+        "fallback_problem": "承認・レビュー運用に課題がある",
+        "fallback_issue": "レビューの実効性や運用効率に改善余地があります",
+        "fallback_proposal": "承認・レビューの進め方や基準を見直す",
+        "fallback_benefit": "運用品質の向上と確認効率の改善",
     },
     "会議": {
-        "label": "会議の進め方",
-        "problem_map": {
-            "長い": "会議時間が長期化している",
-            "無駄": "時間効率に改善余地がある",
-            "曖昧": "結論や決定事項が曖昧になりやすい",
-            "広がりすぎ": "議論が拡散しやすい",
-        },
-        "proposal": "議題設定や進行方法を見直す",
-        "benefit": "意思決定の迅速化と会議時間の短縮",
+        "topic_keywords": ["会議", "打ち合わせ", "議題", "結論", "長い", "決まらない", "広がり", "曖昧"],
+        "topic_label": "会議運営",
+        "problem_rules": [
+            {
+                "keywords": ["長い"],
+                "problem_label": "会議時間が長くなっている",
+                "business_issue": "時間効率が低下している可能性があります",
+                "proposal": "議題ごとの時間配分を明確化する",
+                "benefit": "会議時間の短縮と集中度の向上",
+            },
+            {
+                "keywords": ["結論", "曖昧"],
+                "problem_label": "結論や決定事項が曖昧になっている",
+                "business_issue": "会議後の行動が不明確になりやすい状態です",
+                "proposal": "決定事項と担当を会議内で明確化する",
+                "benefit": "会議後の行動明確化と実行力の向上",
+            },
+            {
+                "keywords": ["話", "広がり"],
+                "problem_label": "議論が広がりすぎている",
+                "business_issue": "本来の論点から外れやすくなっています",
+                "proposal": "議題の範囲を事前共有し、進行役を明確にする",
+                "benefit": "論点の集中と意思決定の迅速化",
+            },
+            {
+                "keywords": ["決まらない"],
+                "problem_label": "会議で物事が決まりにくい",
+                "business_issue": "合意形成や判断が先送りされやすい状態です",
+                "proposal": "会議の目的と判断事項を事前に整理する",
+                "benefit": "判断スピードの向上と会議の有効性向上",
+            },
+        ],
+        "fallback_problem": "会議運営に課題がある",
+        "fallback_issue": "議論や意思決定の進め方に改善余地があります",
+        "fallback_proposal": "会議の進め方やルールを見直す",
+        "fallback_benefit": "会議効率の改善と意思決定の明確化",
     },
     "報告": {
-        "label": "報告方法",
-        "problem_map": {
-            "バラバラ": "報告内容や粒度にばらつきがある",
-            "分かりにくい": "情報が整理されず理解しにくい",
-            "遅い": "情報共有のタイミングに課題がある",
-        },
-        "proposal": "報告フォーマットやルールを統一する",
-        "benefit": "認識齟齬の削減と確認効率の向上",
-    },
-    "工数": {
-        "label": "工数管理",
-        "problem_map": {
-            "見えない": "進捗把握がしにくい",
-            "遅れ": "課題発見が遅れやすい",
-            "バラバラ": "管理方法にばらつきがある",
-        },
-        "proposal": "管理方法や共有ルールを見直す",
-        "benefit": "進捗把握の精度向上と課題発見の早期化",
-    },
-    "レビュー": {
-        "label": "レビュー体制",
-        "problem_map": {
-            "遅い": "レビュー待ち時間が長い",
-            "偏る": "属人化が起きている",
-            "ばらつく": "品質判断にばらつきがある",
-        },
-        "proposal": "レビュー基準や担当の分散方法を見直す",
-        "benefit": "品質安定化と待機時間の短縮",
-    },
-    "備品": {
-        "label": "備品運用",
-        "problem_map": {
-            "古い": "備品の老朽化が進んでいる",
-            "足りない": "必要な備品が不足している",
-            "使いにくい": "使用感に課題がある",
-        },
-        "proposal": "備品の更新や補充ルールを見直す",
-        "benefit": "業務環境の改善と利便性向上",
+        "topic_keywords": ["報告", "共有", "進捗", "粒度", "フォーマット", "バラバラ", "分かりにくい"],
+        "topic_label": "報告・共有運用",
+        "problem_rules": [
+            {
+                "keywords": ["バラバラ"],
+                "problem_label": "報告の仕方にばらつきがある",
+                "business_issue": "情報の比較や把握がしにくくなっています",
+                "proposal": "報告フォーマットや観点を統一する",
+                "benefit": "認識齟齬の削減と確認効率の向上",
+            },
+            {
+                "keywords": ["粒度"],
+                "problem_label": "報告内容の粒度が揃っていない",
+                "business_issue": "必要な情報が過不足なく伝わりにくい状態です",
+                "proposal": "報告項目と粒度の基準を整理する",
+                "benefit": "報告品質の安定化と判断のしやすさ向上",
+            },
+            {
+                "keywords": ["分かりにくい"],
+                "problem_label": "報告内容が理解しにくい",
+                "business_issue": "内容把握に追加確認が必要になりやすい状態です",
+                "proposal": "結論・理由・対応方針の順で整理するルールを設ける",
+                "benefit": "理解速度の向上と追加確認の削減",
+            },
+            {
+                "keywords": ["遅い"],
+                "problem_label": "報告や共有のタイミングが遅い",
+                "business_issue": "課題発見や対応判断が後ろ倒しになりやすい状態です",
+                "proposal": "報告タイミングや共有頻度を見直す",
+                "benefit": "課題発見の早期化と対応スピード向上",
+            },
+        ],
+        "fallback_problem": "報告・共有運用に課題がある",
+        "fallback_issue": "情報共有の質やタイミングに改善余地があります",
+        "fallback_proposal": "報告ルールや共有方法を見直す",
+        "fallback_benefit": "情報共有の精度向上と認識合わせの効率化",
     },
 }
 
-NEGATIVE_WORDS = [
-    "無駄",
-    "意味ない",
-    "最悪",
-    "イライラする",
-    "腹立つ",
-    "だるい",
-    "しんどい",
-]
-
-DESIRE_PATTERNS = [
-    ("買い替え", "更新"),
-    ("変えたほうがいい", "見直し"),
-    ("直したほうがいい", "改善"),
-    ("やめたほうがいい", "見直し"),
-    ("減らしたほうがいい", "削減"),
-    ("増やしたほうがいい", "拡充"),
-]
+NEGATIVE_WORDS = ["無駄", "意味ない", "最悪", "イライラ", "腹立つ", "だるい", "しんどい"]
 
 
 def clean_text(text: str) -> str:
-    t = text.strip()
-    t = t.replace("です。", "。").replace("ます。", "。")
-    return t
+    if not text:
+        return ""
+    return text.strip()
 
 
-def detect_topic(text: str) -> str:
-    for key in TOPIC_RULES.keys():
-        if key in text:
-            return key
-    return ""
+def count_keyword_hits(text: str, keywords: list[str]) -> int:
+    return sum(1 for kw in keywords if kw in text)
 
 
-def detect_problem_phrase(text: str, topic_key: str) -> str:
-    if topic_key and topic_key in TOPIC_RULES:
-        for word, phrase in TOPIC_RULES[topic_key]["problem_map"].items():
-            if word in text:
-                return phrase
+def detect_category(text: str) -> str:
+    best_category = ""
+    best_score = 0
 
-    if "古い" in text:
-        return "老朽化が進んでいる"
-    if "汚い" in text:
-        return "衛生面に課題がある"
-    if "分かりにくい" in text:
-        return "内容が理解しにくい"
-    if "曖昧" in text:
-        return "判断基準や結論が曖昧になりやすい"
-    if "遅い" in text:
-        return "対応や共有に時間がかかっている"
-    if "バラバラ" in text:
-        return "運用方法にばらつきがある"
+    for category, rule in CATEGORY_RULES.items():
+        score = count_keyword_hits(text, rule["topic_keywords"])
+        if score > best_score:
+            best_score = score
+            best_category = category
 
-    if any(word in text for word in NEGATIVE_WORDS):
-        return "現状の運用に改善余地がある"
+    return best_category
 
-    return "現状の運用に課題がある"
+
+def detect_problem_rule(text: str, category: str) -> dict:
+    if not category:
+        return {}
+
+    rules = CATEGORY_RULES[category]["problem_rules"]
+    best_rule = {}
+    best_score = 0
+
+    for rule in rules:
+        score = count_keyword_hits(text, rule["keywords"])
+        if score > best_score:
+            best_score = score
+            best_rule = rule
+
+    return best_rule
 
 
 def detect_desired_action(text: str) -> str:
-    for src, dst in DESIRE_PATTERNS:
-        if src in text:
-            return dst
     if "買い替え" in text:
         return "更新"
     if "統一" in text:
         return "統一"
     if "可視化" in text:
         return "可視化"
+    if "見直し" in text:
+        return "見直し"
+    if "整理" in text:
+        return "整理"
     return ""
 
 
-def build_topic_specific_proposal(topic_key: str, desired_action: str) -> str:
-    if topic_key and topic_key in TOPIC_RULES:
-        base = TOPIC_RULES[topic_key]["proposal"]
-        if desired_action:
-            return f"{TOPIC_RULES[topic_key]['label']}について、{desired_action}を含む形で{base}ことを提案します。"
-        return f"{TOPIC_RULES[topic_key]['label']}について、{base}ことを提案します。"
+def build_conclusion(category_rule: dict, desired_action: str) -> str:
+    topic_label = category_rule["topic_label"]
 
-    if desired_action:
-        return f"現在の運用について、{desired_action}を含む形で見直しを行うことを提案します。"
-    return "現在の運用について、進め方や基準を整理し、見直しを行うことを提案します。"
+    if desired_action == "更新":
+        return f"{topic_label}について、更新を検討すべきです。"
+    if desired_action == "統一":
+        return f"{topic_label}について、運用の統一を検討すべきです。"
+    if desired_action == "可視化":
+        return f"{topic_label}について、可視化を進めるべきです。"
+    if desired_action == "整理":
+        return f"{topic_label}について、整理を進めるべきです。"
 
-
-def build_benefit(topic_key: str) -> str:
-    if topic_key and topic_key in TOPIC_RULES:
-        return TOPIC_RULES[topic_key]["benefit"]
-    return "業務効率や運用品質の向上"
+    return f"{topic_label}について、見直しを検討すべきです。"
 
 
-def build_conclusion(topic_key: str, desired_action: str) -> str:
-    if topic_key and topic_key in TOPIC_RULES:
-        label = TOPIC_RULES[topic_key]["label"]
-        if desired_action == "更新":
-            return f"{label}については、更新を検討すべきです。"
-        if desired_action == "統一":
-            return f"{label}については、運用の統一を検討すべきです。"
-        if desired_action == "可視化":
-            return f"{label}については、可視化を進めるべきです。"
-        return f"{label}には改善の余地があります。"
-    return "現在の運用には改善の余地があります。"
+def build_background(topic_label: str, problem_label: str, business_issue: str, text: str) -> str:
+    return (
+        f"現在、{topic_label}では「{problem_label}」状況があり、"
+        f"{business_issue} "
+        f"入力内容からも「{text}」という問題意識が読み取れます。"
+    )
 
 
-def summarize_input_as_issue(text: str, topic_key: str) -> str:
-    topic_label = TOPIC_RULES[topic_key]["label"] if topic_key in TOPIC_RULES else "現状の運用"
-    problem_phrase = detect_problem_phrase(text, topic_key)
-    return f"{topic_label}では、{problem_phrase}と考えられます。"
+def build_proposal_text(topic_label: str, proposal: str) -> str:
+    return f"{topic_label}について、{proposal}ことを提案します。"
+
+
+def build_benefit_text(benefit: str) -> str:
+    return f"これにより、{benefit}が期待されます。"
 
 
 def build_proposal(text: str) -> str:
     cleaned = clean_text(text)
-    topic_key = detect_topic(cleaned)
+    category = detect_category(cleaned)
+
+    if not category:
+        return (
+            "結論：\n現在の運用には改善の余地があります。\n\n"
+            "背景・課題：\n入力内容から改善ニーズは読み取れますが、対象や問題点がやや広いため、まず改善対象を整理する必要があります。\n\n"
+            "提案内容：\n対象となる業務や運用を明確にしたうえで、見直しの方向性を整理することを提案します。\n\n"
+            "期待効果：\n論点の明確化により、具体的な改善検討がしやすくなります。"
+        )
+
+    category_rule = CATEGORY_RULES[category]
+    problem_rule = detect_problem_rule(cleaned, category)
     desired_action = detect_desired_action(cleaned)
-    conclusion = build_conclusion(topic_key, desired_action)
-    issue_summary = summarize_input_as_issue(cleaned, topic_key)
-    proposal = build_topic_specific_proposal(topic_key, desired_action)
-    benefit = build_benefit(topic_key)
 
-    topic_label = TOPIC_RULES[topic_key]["label"] if topic_key in TOPIC_RULES else "現在の運用"
+    if problem_rule:
+        problem_label = problem_rule["problem_label"]
+        business_issue = problem_rule["business_issue"]
+        proposal = problem_rule["proposal"]
+        benefit = problem_rule["benefit"]
+    else:
+        problem_label = category_rule["fallback_problem"]
+        business_issue = category_rule["fallback_issue"]
+        proposal = category_rule["fallback_proposal"]
+        benefit = category_rule["fallback_benefit"]
 
-    background = (
-        f"{issue_summary} "
-        f"入力内容からは「{cleaned}」という問題意識があり、"
-        f"{topic_label}に関して改善ニーズがあると考えられます。"
-    )
+    topic_label = category_rule["topic_label"]
 
-    benefit_text = f"これにより、{benefit}が期待されます。"
+    conclusion = build_conclusion(category_rule, desired_action)
+    background = build_background(topic_label, problem_label, business_issue, cleaned)
+    proposal_text = build_proposal_text(topic_label, proposal)
+    benefit_text = build_benefit_text(benefit)
 
     return (
         f"結論：\n{conclusion}\n\n"
         f"背景・課題：\n{background}\n\n"
-        f"提案内容：\n{proposal}\n\n"
+        f"提案内容：\n{proposal_text}\n\n"
         f"期待効果：\n{benefit_text}"
     )
 
 
 def build_comments(text: str) -> list[html.Li]:
-    comments = []
-    topic_key = detect_topic(text)
-    desired_action = detect_desired_action(text)
+    cleaned = clean_text(text)
+    category = detect_category(cleaned)
 
-    if topic_key:
-        comments.append(html.Li(f"入力文から対象として「{TOPIC_RULES[topic_key]['label']}」を抽出しました。"))
+    if not category:
+        return [html.Li("対象が広かったため、まず改善対象を整理する前提で構成しました。")]
+
+    category_rule = CATEGORY_RULES[category]
+    problem_rule = detect_problem_rule(cleaned, category)
+    desired_action = detect_desired_action(cleaned)
+
+    comments = [html.Li(f"入力文からカテゴリとして「{category_rule['topic_label']}」を抽出しました。")]
+
+    if problem_rule:
+        comments.append(html.Li(f"問題点として「{problem_rule['problem_label']}」を読み取りました。"))
+        comments.append(html.Li(f"提案は「{problem_rule['proposal']}」の方向で組み立てました。"))
     else:
-        comments.append(html.Li("対象が広めだったため、提案対象を一般化して構成しました。"))
+        comments.append(html.Li("個別の問題パターンに強く一致しなかったため、カテゴリ全体の見直し提案として構成しました。"))
 
     if desired_action:
-        comments.append(html.Li(f"入力文に含まれる要望をもとに、「{desired_action}」の方向で提案内容を組み立てました。"))
-    else:
-        comments.append(html.Li("要望が明示されていなかったため、見直し提案として再構成しました。"))
+        comments.append(html.Li(f"入力文に含まれる要望をもとに、「{desired_action}」の方向性も反映しました。"))
 
-    if any(word in text for word in NEGATIVE_WORDS):
+    if any(word in cleaned for word in NEGATIVE_WORDS):
         comments.append(html.Li("感情の強い表現は避け、上司に出しやすい中立的な表現へ変換しました。"))
 
     comments.append(html.Li("結論→背景・課題→提案内容→期待効果の順に整理しました。"))
@@ -244,7 +280,7 @@ app.layout = html.Div(
         html.P("違和感・不満・愚痴をそのまま入れると、上司に通りやすい提案文に整えます。"),
         dcc.Textarea(
             id="input-text",
-            placeholder="例：この会議、正直無駄が多いと思う",
+            placeholder="例：文書の回覧ですが、コメントほとんどなしで承認していることが頻繁していて、無駄です",
             style={"width": "100%", "height": 180, "fontSize": "18px"},
         ),
         html.Br(),
@@ -252,7 +288,7 @@ app.layout = html.Div(
         html.H2("そのまま使える提案文"),
         dcc.Textarea(
             id="output-text",
-            style={"width": "100%", "height": 320, "fontSize": "18px"},
+            style={"width": "100%", "height": 340, "fontSize": "18px"},
             readOnly=True,
         ),
         html.H2("変換のポイント"),
